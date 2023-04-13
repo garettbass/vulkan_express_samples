@@ -1,0 +1,10 @@
+[submodule "ext/glfw"]
+	path = ext/glfw
+	url = https://github.com/glfw/glfw.git
+	branch = 3.3-stable
+[submodule "ext/cxe"]
+	path = ext/cxe
+	url = https://github.com/garettbass/cxe.git
+[submodule "ext/vulkan_express"]
+	path = ext/vulkan_express
+	url = https://github.com/garettbass/vulkan_express.git

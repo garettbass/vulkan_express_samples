@@ -1,0 +1,38 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${default}",
+                "${VULKAN_SDK}/Include",
+                "inc",
+                "src"
+            ],
+            "defines": [
+                "_DEBUG"
+            ],
+            "windowsSdkVersion": "10.0.22000.0",
+            "compilerPath": "clang.exe",
+            "cStandard": "c23",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "windows-clang-x64"
+        },
+        {
+            "name": "Mac",
+            "includePath": [
+                "${default}",
+                "${VULKAN_SDK}/Include",
+                "inc",
+                "src"
+            ],
+            "defines": [
+                "_DEBUG"
+            ],
+            "compilerPath": "clang",
+            "cStandard": "c23",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "clang-arm64"
+        }
+    ],
+    "version": 4
+}

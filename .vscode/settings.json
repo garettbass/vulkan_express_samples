@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.gdshader": "glsl",
+        "vulkan_express.h": "c"
+    }
+}
