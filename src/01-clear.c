@@ -8,6 +8,7 @@
     -fsanitize=address
     -I$VULKAN_SDK/include
     -I../inc
+    -DCXE_SRC_NAME=\"$CXE_SRC_NAME\"
     -if (--target=[darwin]) {
         -pre { mkdir -p ../bin/macos }
         -o../bin/macos/$CXE_SRC_NAME
@@ -38,6 +39,10 @@
     -lglfw3
     -post { $CXE $CXE_SRC_NAME++.cpp }
 }*/
+
+#ifndef SAMPLE_SOURCE
+#define SAMPLE_SOURCE "01-clear.c"
+#endif
 
 #include <math.h>
 
@@ -147,18 +152,18 @@ int main(const int argc, const char* argv[]) {
 
     // window & canvas
 
+    const char title[] = "vulkan_express_samples/src/" SAMPLE_SOURCE;
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(1024, 768, "vxtest.c", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1024, 768, title, NULL, NULL);
     glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
     glfwSetKeyCallback(window, glfwKeyCallback);
 
     VxCanvas canvas;
     VxCanvasCreateInfo canvasCreateInfo = {
-        .windowHandleType    = VX_WINDOW_HANDLE_TYPE_GLFW,
-        .windowHandle        = window,
-        .surfaceFormat       = surfaceFormat,
-        // .swapchainImageCount = 3, // default is VX_MIN_CANVAS_FRAME_COUNT
-        .renderPass          = renderPass,
+        .windowHandleType = VX_WINDOW_HANDLE_TYPE_GLFW,
+        .windowHandle     = window,
+        .surfaceFormat    = surfaceFormat,
+        .renderPass       = renderPass,
     };
     vxAssertSuccess(
         vxCreateCanvas(

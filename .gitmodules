@@ -8,3 +8,6 @@
 [submodule "ext/vulkan_express"]
 	path = ext/vulkan_express
 	url = https://github.com/garettbass/vulkan_express.git
+[submodule "ext/stb"]
+	path = ext/stb
+	url = https://github.com/nothings/stb.git

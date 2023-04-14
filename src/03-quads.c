@@ -1,6 +1,6 @@
 /*cxe{
-    -pre { glslc sample02_helloTriangle.vert -mfmt=c -o sample02_helloTriangle.vert.h }
-    -pre { glslc sample02_helloTriangle.frag -mfmt=c -o sample02_helloTriangle.frag.h }
+    -pre { glslc 03-quads.vert -mfmt=c -o 03-quads.vert.h }
+    -pre { glslc 03-quads.frag -mfmt=c -o 03-quads.frag.h }
     -pre { $CXE glfw3.c }
     -std=c11
     -Wall -Werror
@@ -40,6 +40,10 @@
     -lglfw3
     -post { $CXE $CXE_SRC_NAME++.cpp }
 }*/
+
+#ifndef SAMPLE_SOURCE
+#define SAMPLE_SOURCE "03-quads.c"
+#endif
 
 #include <math.h>
 
@@ -151,11 +155,11 @@ int main(const int argc, const char* argv[]) {
     // graphics pipeline
 
     const uint32_t vert[] =
-        #include "sample02_helloTriangle.vert.h"
+        #include "03-quads.vert.h"
         ;
 
     const uint32_t frag[] =
-        #include "sample02_helloTriangle.frag.h"
+        #include "03-quads.frag.h"
         ;
 
     VkShaderModule vertShaderModule;
@@ -205,7 +209,7 @@ int main(const int argc, const char* argv[]) {
                 },
                 .pInputAssemblyState = VxInlinePtr(VkPipelineInputAssemblyStateCreateInfo){
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                    .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
                 },
                 .pViewportState = VxInlinePtr(VkPipelineViewportStateCreateInfo){
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -261,18 +265,18 @@ int main(const int argc, const char* argv[]) {
 
     // window & canvas
 
+    const char title[] = "vulkan_express_samples/src/" SAMPLE_SOURCE;
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(1024, 768, "vxtest.c", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1024, 768, title, NULL, NULL);
     glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
     glfwSetKeyCallback(window, glfwKeyCallback);
 
     VxCanvas canvas;
     VxCanvasCreateInfo canvasCreateInfo = {
-        .windowHandleType    = VX_WINDOW_HANDLE_TYPE_GLFW,
-        .windowHandle        = window,
-        .surfaceFormat       = surfaceFormat,
-        // .swapchainImageCount = 3, // default is VX_MIN_CANVAS_FRAME_COUNT
-        .renderPass          = renderPass,
+        .windowHandleType = VX_WINDOW_HANDLE_TYPE_GLFW,
+        .windowHandle     = window,
+        .surfaceFormat    = surfaceFormat,
+        .renderPass       = renderPass,
     };
     vxAssertSuccess(
         vxCreateCanvas(
@@ -312,8 +316,8 @@ int main(const int argc, const char* argv[]) {
             .renderArea  = {
                 .extent  = canvas.extent,
             },
-            .clearValueCount   = 1,
-            .pClearValues      = VxInlineArray(VkClearValue){
+            .clearValueCount = 1,
+            .pClearValues    = VxInlineArray(VkClearValue){
                 { .color = clearColorValue },
             },
         };
@@ -333,7 +337,7 @@ int main(const int argc, const char* argv[]) {
                 .extent = canvas.extent,
             });
 
-            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+            vkCmdDraw(commandBuffer, 4, 1, 0, 0);
         }
         vkCmdEndRenderPass(commandBuffer);
 
@@ -343,6 +347,8 @@ int main(const int argc, const char* argv[]) {
     }
 
     vkDeviceWaitIdle(context.device);
+    vkDestroyPipeline(context.device, graphicsPipeline, context.pAllocator);
+    vkDestroyPipelineLayout(context.device, graphicsPipelineLayout, context.pAllocator);
     vkDestroyRenderPass(context.device, renderPass, context.pAllocator);
     vxDestroyCanvas(&context, &canvas);
     vxDestroyContext(&context);

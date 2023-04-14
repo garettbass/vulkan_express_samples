@@ -1,6 +1,4 @@
 /*cxe{
-    -pre { glslc sample02_helloTriangle.vert -mfmt=c -o sample02_helloTriangle.vert.h }
-    -pre { glslc sample02_helloTriangle.frag -mfmt=c -o sample02_helloTriangle.frag.h }
     -pre { $CXE glfw3.c }
     -std=c++20
     -Wall -Werror
@@ -40,4 +38,8 @@
     -lglfw3
 }*/
 
-#include "sample02_helloTriangle.c"
+#ifndef SAMPLE_SOURCE
+#define SAMPLE_SOURCE "01-clear++.cpp"
+#endif
+
+#include "01-clear.c"
