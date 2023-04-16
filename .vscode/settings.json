@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "*.gdshader": "glsl",
-        "vulkan_express.h": "c"
+        "vulkan_express.h": "c",
+        "spirv_reflect.h": "c"
     }
 }

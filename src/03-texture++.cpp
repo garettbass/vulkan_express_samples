@@ -1,6 +1,6 @@
 /*cxe{
-    -pre { glslc 03-quads.vert -mfmt=c -o 03-quads.vert.h }
-    -pre { glslc 03-quads.frag -mfmt=c -o 03-quads.frag.h }
+    -pre { glslc 03-texture.vert -mfmt=c -o 03-texture.vert.h }
+    -pre { glslc 03-texture.frag -mfmt=c -o 03-texture.frag.h }
     -pre { $CXE glfw3.c }
     -std=c++20
     -Wall -Werror
@@ -8,7 +8,7 @@
     -Wno-unused-but-set-variable
     -ferror-limit=2
     -fsanitize=address
-    -I$VULKAN_SDK/include
+    -I$VULKAN_SDK/Include
     -I../inc
     -if (--target=[darwin]) {
         -pre { mkdir -p ../bin/macos }
@@ -41,7 +41,7 @@
 }*/
 
 #ifndef SAMPLE_SOURCE
-#define SAMPLE_SOURCE "03-quads++.cpp"
+#define SAMPLE_SOURCE "03-texture++.cpp"
 #endif
 
-#include "03-quads.c"
+#include "03-texture.c"

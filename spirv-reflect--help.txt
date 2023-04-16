@@ -1,0 +1,16 @@
+Usage: spirv-reflect [OPTIONS] path/to/SPIR-V/bytecode.spv
+Prints a summary of the reflection data extracted from SPIR-V bytecode.
+Options:
+ --help                   Display this message
+ -y,--yaml                Format output as YAML. [default: disabled]
+ -v VERBOSITY             Specify output verbosity (YAML output only):
+                          0: shader info, block variables, interface variables,
+                             descriptor bindings. No type descriptions. [default]
+                          1: Everything above, plus type descriptions.
+                          2: Everything above, plus SPIR-V bytecode and all internal
+                             type descriptions. If you're not working on SPIRV-Reflect
+                             itself, you probably don't want this.
+-e,--entrypoint           Prints the entry point found in shader module.
+-s,--stage                Prints the Vulkan shader stage found in shader module.
+-f,--file                 Prints the source file found in shader module.
+-fcb,--flatten_cbuffers   Flatten constant buffers on non-YAML output.

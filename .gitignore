@@ -2,8 +2,11 @@
 # Build Artefacts #
 ###################
 bin/*
-build/*
 lib/*
+tmp/*
+src/**/*.spv
+src/**/*.vert.yaml
+src/**/*.frag.yaml
 
 ######################
 # Visual Studio Code #
@@ -20,3 +23,8 @@ lib/*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+#########################
+# Krita Temporary Files #
+#########################
+*~

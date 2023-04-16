@@ -8,7 +8,7 @@
     -Wno-unused-but-set-variable
     -ferror-limit=2
     -fsanitize=address
-    -I$VULKAN_SDK/include
+    -I$VULKAN_SDK/Include
     -I../inc
     -if (--target=[darwin]) {
         -pre { mkdir -p ../bin/macos }

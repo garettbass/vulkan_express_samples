@@ -5,6 +5,7 @@
             "includePath": [
                 "${default}",
                 "${VULKAN_SDK}/Include",
+                "${VULKAN_SDK}/Source",
                 "inc",
                 "src"
             ],
@@ -22,6 +23,7 @@
             "includePath": [
                 "${default}",
                 "${VULKAN_SDK}/Include",
+                "${VULKAN_SDK}/Source",
                 "inc",
                 "src"
             ],

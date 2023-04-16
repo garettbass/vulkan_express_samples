@@ -6,7 +6,7 @@
     -Wno-unused-but-set-variable
     -ferror-limit=2
     -fsanitize=address
-    -I$VULKAN_SDK/include
+    -I$VULKAN_SDK/Include
     -I../inc
     -DCXE_SRC_NAME=\"$CXE_SRC_NAME\"
     -if (--target=[darwin]) {
@@ -65,120 +65,132 @@ int main(const int argc, const char* argv[]) {
         return 1;
     }
 
+    VkSurfaceFormatKHR surfaceFormat;
     VxContext context;
-    vxAssertSuccess(vxCreateContext(NULL, &context));
+    {
+        vxAssertSuccess(vxCreateContext(NULL, &context));
 
-    printf(
-        "context.surfaceCapabilities.minImageCount: %u\n",
-         context.surfaceCapabilities.minImageCount
-    );
-    printf(
-        "context.surfaceCapabilities.maxImageCount: %u\n",
-         context.surfaceCapabilities.maxImageCount
-    );
-    printf(
-        "context.surfaceCapabilities.maxImageArrayLayers: %u\n",
-         context.surfaceCapabilities.maxImageArrayLayers
-    );
+        vxInfo(
+            "context.surfaceCapabilities.minImageCount: %u\n",
+            context.surfaceCapabilities.minImageCount
+        );
+        vxInfo(
+            "context.surfaceCapabilities.maxImageCount: %u\n",
+            context.surfaceCapabilities.maxImageCount
+        );
+        vxInfo(
+            "context.surfaceCapabilities.maxImageArrayLayers: %u\n",
+            context.surfaceCapabilities.maxImageArrayLayers
+        );
 
-    printf("context.surfaceFormatCount: %u\n", context.surfaceFormatCount);
-    for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
-        printf(
-            "context.surfaceFormats[%u]: { %s, %s }\n", i,
-            vxFormatName(context.surfaceFormats[i].format),
-            vxColorSpaceName(context.surfaceFormats[i].colorSpace)
+        vxInfo("context.surfaceFormatCount: %u\n", context.surfaceFormatCount);
+        for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
+            vxInfo(
+                "context.surfaceFormats[%u]: { %s, %s }\n", i,
+                vxFormatName(context.surfaceFormats[i].format),
+                vxColorSpaceName(context.surfaceFormats[i].colorSpace)
+            );
+        }
+
+        surfaceFormat = context.surfaceFormats[0];
+        for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
+            const VkFormat format = context.surfaceFormats[i].format;
+            if (format == VK_FORMAT_B8G8R8A8_SRGB ||
+                format == VK_FORMAT_R8G8B8A8_SRGB) {
+                surfaceFormat = context.surfaceFormats[i]; // preferred format
+                break;
+            }
+        }
+        vxInfo(
+            "using surfaceFormat { %s, %s }\n",
+            vxFormatName(surfaceFormat.format),
+            vxColorSpaceName(surfaceFormat.colorSpace)
         );
     }
 
-    VkSurfaceFormatKHR surfaceFormat = context.surfaceFormats[0];
-    for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
-        const VkFormat format = context.surfaceFormats[i].format;
-        if (format == VK_FORMAT_B8G8R8A8_SRGB ||
-            format == VK_FORMAT_R8G8B8A8_SRGB) {
-            surfaceFormat = context.surfaceFormats[i]; // preferred format
-            break;
-        }
-    }
-    printf(
-        "using surfaceFormat { %s, %s }\n",
-        vxFormatName(surfaceFormat.format),
-        vxColorSpaceName(surfaceFormat.colorSpace)
-    );
+    const uint32_t swapchainImageCount = 2;
 
     VkRenderPass renderPass;
-    vxAssertSuccess(
-        vkCreateRenderPass(
-            context.device,
-            VxInlinePtr(VkRenderPassCreateInfo){
-                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-                .attachmentCount = 1,
-                .pAttachments = VxInlineArray(VkAttachmentDescription){
-                    { // 0 - swapchain image
-                        .format         = surfaceFormat.format,
-                        .samples        = VK_SAMPLE_COUNT_1_BIT,
-                        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                        .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
-                        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-                        .finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    },
-                },
-                .subpassCount = 1,
-                .pSubpasses = VxInlinePtr(VkSubpassDescription){
-                    .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    .colorAttachmentCount = 1,
-                    .pColorAttachments = VxInlineArray(VkAttachmentReference){
+    {
+        vxAssertSuccess(
+            vkCreateRenderPass(
+                context.device,
+                VxInlinePtr(VkRenderPassCreateInfo){
+                    .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                    .attachmentCount = 1,
+                    .pAttachments = VxInlineArray(VkAttachmentDescription){
                         { // 0 - swapchain image
-                            .attachment = 0,
-                            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            .format         = surfaceFormat.format,
+                            .samples        = VK_SAMPLE_COUNT_1_BIT,
+                            .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                            .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+                            .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                            .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                         },
                     },
+                    .subpassCount = 1,
+                    .pSubpasses = VxInlinePtr(VkSubpassDescription){
+                        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = VxInlineArray(VkAttachmentReference){
+                            { // 0 - swapchain image
+                                .attachment = 0,
+                                .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            },
+                        },
+                    },
+                    .dependencyCount = 1,
+                    .pDependencies = VxInlinePtr(VkSubpassDependency){
+                        .srcSubpass    = VK_SUBPASS_EXTERNAL,
+                        .dstSubpass    = 0,
+                        .srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .srcAccessMask = 0,
+                        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                    },
                 },
-                .dependencyCount = 1,
-                .pDependencies = VxInlinePtr(VkSubpassDependency){
-                    .srcSubpass    = VK_SUBPASS_EXTERNAL,
-                    .dstSubpass    = 0,
-                    .srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    .dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    .srcAccessMask = 0,
-                    .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                },
-            },
-            context.pAllocator,
-            &renderPass
-        )
-    );
-
-    // window & canvas
+                context.pAllocator,
+                &renderPass
+            )
+        );
+    }
 
     const char title[] = "vulkan_express_samples/src/" SAMPLE_SOURCE;
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(1024, 768, title, NULL, NULL);
-    glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
-    glfwSetKeyCallback(window, glfwKeyCallback);
+    GLFWwindow* window;
+    {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        window = glfwCreateWindow(1024, 768, title, NULL, NULL);
+        glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
+        glfwSetKeyCallback(window, glfwKeyCallback);
+    }
 
     VxCanvas canvas;
-    VxCanvasCreateInfo canvasCreateInfo = {
-        .windowHandleType = VX_WINDOW_HANDLE_TYPE_GLFW,
-        .windowHandle     = window,
-        .surfaceFormat    = surfaceFormat,
-        .renderPass       = renderPass,
-    };
-    vxAssertSuccess(
-        vxCreateCanvas(
-            &context,
-            &canvasCreateInfo,
-            &canvas
-        )
-    );
+    {
+        vxAssertSuccess(
+            vxCreateCanvas(
+                &context,
+                VxInlinePtr(VxCanvasCreateInfo){
+                    .windowHandleType    = VX_WINDOW_HANDLE_TYPE_GLFW,
+                    .windowHandle        = window,
+                    .surfaceFormat       = surfaceFormat,
+                    .swapchainImageCount = swapchainImageCount,
+                    .preferredPresentModeCount = 1,
+                    .preferredPresentModes     = {
+                        VK_PRESENT_MODE_FIFO_KHR,
+                    },
+                    .renderPass = renderPass,
+                },
+                &canvas
+            )
+        );
 
-    printf("canvas.frameCount: %u\n\n", canvas.frameCount);
-
-    // update loop
+        vxInfo("canvas.frameCount: %u", canvas.frameCount);
+    }
 
     VkClearColorValue clearColorValue = {{ 0.4f, 0.6f, 0.9f, 1.f }};
-    float colorChannelStep[3] = { 0.0004f, 0.0006f, 0.0009f };
+    float colorChannelStep[3] = { 0.002f, 0.003f, 0.0045f };
 
     while (!(glfwPollEvents(),glfwWindowShouldClose(window))) {
 

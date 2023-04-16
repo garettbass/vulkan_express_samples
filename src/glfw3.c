@@ -1,7 +1,7 @@
 /*cxe{
     -std=c99
     -Wall -Werror
-    // -fsanitize=address
+    -fsanitize=address
     -if (--target=[darwin]) {
         -pre { mkdir -p ../lib/macos }
         -o ../lib/macos/libglfw3.a
