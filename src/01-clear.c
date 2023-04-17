@@ -2,8 +2,6 @@
     -pre { $CXE glfw3.c }
     -std=c11
     -Wall -Werror
-    -Wno-unused-variable
-    -Wno-unused-but-set-variable
     -ferror-limit=2
     -fsanitize=address
     -I$VULKAN_SDK/Include
