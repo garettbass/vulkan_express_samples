@@ -6,7 +6,6 @@
     -fsanitize=address
     -I$VULKAN_SDK/Include
     -I../inc
-    -DCXE_SRC_NAME=\"$CXE_SRC_NAME\"
     -if (--target=[darwin]) {
         -pre { mkdir -p ../bin/macos }
         -o../bin/macos/$CXE_SRC_NAME
