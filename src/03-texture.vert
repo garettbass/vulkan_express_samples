@@ -1,9 +1,9 @@
 #version 450
 
-const float Up = -1.0;
-const float Dn =  1.0;
 const float Lf = -1.0;
+const float Up = -1.0;
 const float Rt =  1.0;
+const float Dn =  1.0;
 
 vec2 A = { Lf, Up }; // A--B
 vec2 B = { Rt, Up }; // | /|

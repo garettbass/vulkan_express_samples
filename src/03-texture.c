@@ -56,6 +56,31 @@
 
 //------------------------------------------------------------------------------
 
+#ifdef _WIN32
+    #include <direct.h> // _chdir
+    #define chdir _chdir
+    const char pathSeparator = '\\';
+#else
+    #include <unistd.h> // chdir
+    const char pathSeparator = '/';
+#endif
+
+void setWorkingDirectory(char* const argv0) {
+    const size_t pathLen = strlen(argv0);
+    char* ritr = argv0 + pathLen;
+    for (; ritr --> argv0;) {
+        if (*ritr == pathSeparator) {
+            *ritr = 0; // trim path at first path separator
+            printf("chdir(\"%s\")\n", argv0);
+            chdir(argv0);
+            *ritr = pathSeparator;
+            break;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
 void glfwKeyCallback(GLFWwindow* w, int key, int code, int action, int mod) {
     if (key == GLFW_KEY_ESCAPE && action) {
         glfwSetWindowShouldClose(w, GLFW_TRUE);
@@ -127,7 +152,6 @@ VkResult loadImage(
             stagingBuffer,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            nullptr,
             &stagingBufferMemory
         ),{
             vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
@@ -199,7 +223,6 @@ VkResult loadImage(
             pContext,
             *pImage,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            nullptr,
             pImageMemory
         ),{
             vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
@@ -406,7 +429,9 @@ VkResult loadImage(
 
 //------------------------------------------------------------------------------
 
-int main(const int argc, const char* argv[]) {
+int main(const int argc, char* const argv[]) {
+    setWorkingDirectory(argv[0]);
+
     glfwInit();
     if (!glfwVulkanSupported()) {
         puts("GLFW3: Vulkan not supported");
@@ -418,22 +443,22 @@ int main(const int argc, const char* argv[]) {
     {
         vxAssertSuccess(vxCreateContext(NULL, &context));
 
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.minImageCount: %u",
             context.surfaceCapabilities.minImageCount
         );
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.maxImageCount: %u",
             context.surfaceCapabilities.maxImageCount
         );
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.maxImageArrayLayers: %u",
             context.surfaceCapabilities.maxImageArrayLayers
         );
 
-        vxInfo("context.surfaceFormatCount: %u", context.surfaceFormatCount);
+        vxInfof("context.surfaceFormatCount: %u", context.surfaceFormatCount);
         for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
-            vxInfo(
+            vxInfof(
                 "context.surfaceFormats[%u]: { %s, %s }", i,
                 vxFormatName(context.surfaceFormats[i].format),
                 vxColorSpaceName(context.surfaceFormats[i].colorSpace)
@@ -449,7 +474,7 @@ int main(const int argc, const char* argv[]) {
                 break;
             }
         }
-        vxInfo(
+        vxInfof(
             "using surfaceFormat { %s, %s }",
             vxFormatName(surfaceFormat.format),
             vxColorSpaceName(surfaceFormat.colorSpace)
@@ -547,29 +572,10 @@ int main(const int argc, const char* argv[]) {
         );
     }
 
-    VkDescriptorPool descriptorPool;
     VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSets[VX_MAX_CANVAS_FRAME_COUNT];
     {
-        vxAssertSuccess(
-            vkCreateDescriptorPool(
-                context.device,
-                VxInlinePtr(VkDescriptorPoolCreateInfo){
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                    .maxSets = swapchainImageCount,
-                    .poolSizeCount = 1,
-                    .pPoolSizes = VxInlineArray(VkDescriptorPoolSize){
-                        {
-                            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                            .descriptorCount = swapchainImageCount,
-                        },
-                    },
-                },
-                context.pAllocator,
-                &descriptorPool
-            )
-        );
-
         vxAssertSuccess(
             vkCreateDescriptorSetLayout(
                 context.device,
@@ -588,6 +594,25 @@ int main(const int argc, const char* argv[]) {
                 },
                 context.pAllocator,
                 &descriptorSetLayout
+            )
+        );
+
+        vxAssertSuccess(
+            vkCreateDescriptorPool(
+                context.device,
+                VxInlinePtr(VkDescriptorPoolCreateInfo){
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                    .maxSets = swapchainImageCount,
+                    .poolSizeCount = 1,
+                    .pPoolSizes = VxInlineArray(VkDescriptorPoolSize){
+                        {
+                            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                            .descriptorCount = swapchainImageCount,
+                        },
+                    },
+                },
+                context.pAllocator,
+                &descriptorPool
             )
         );
 
@@ -779,7 +804,7 @@ int main(const int argc, const char* argv[]) {
             )
         );
 
-        vxInfo("canvas.frameCount: %u", canvas.frameCount);
+        vxInfof("canvas.frameCount: %u", canvas.frameCount);
     }
 
     VkClearColorValue clearColorValue = {{ 0.4f, 0.6f, 0.9f, 1.f }};
@@ -798,25 +823,14 @@ int main(const int argc, const char* argv[]) {
             );
         }
 
-        VxCanvasFrame* pFrame;
-        vxAssertSuccess(vxBeginFrame(&context, &canvas, ~0u, 0, 0, &pFrame));
+        VxCanvasFrame* pFrame = vxBeginFrame(&context, &canvas);
+        vxAssert(pFrame);
 
-        VkCommandBuffer commandBuffer = pFrame->commandBuffer;
-
-        VkRenderPassBeginInfo renderPassInfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass  = canvas.renderPass,
-            .framebuffer = pFrame->framebuffer,
-            .renderArea  = {
-                .extent  = canvas.extent,
-            },
-            .clearValueCount = 1,
-            .pClearValues    = VxInlineArray(VkClearValue){
+        VkCommandBuffer commandBuffer = vxCmdBeginFrameRenderPass(
+            &canvas, pFrame, 1, VxInlineArray(VkClearValue){
                 { .color = clearColorValue },
-            },
-        };
-
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            }
+        );
         {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
@@ -860,16 +874,16 @@ int main(const int argc, const char* argv[]) {
     }
 
     vkDeviceWaitIdle(context.device);
-    vkDestroyPipeline(context.device, graphicsPipeline, context.pAllocator);
-    vkDestroyPipelineLayout(context.device, graphicsPipelineLayout, context.pAllocator);
-    vkDestroyDescriptorSetLayout(context.device, descriptorSetLayout, context.pAllocator);
-    vkDestroyDescriptorPool(context.device, descriptorPool, context.pAllocator);
-    vkDestroySampler(context.device, imageSampler, context.pAllocator);
-    vkDestroyImageView(context.device, imageView, context.pAllocator);
-    vkDestroyImage(context.device, image, context.pAllocator);
-    vkFreeMemory(context.device, imageMemory, context.pAllocator);
-    vkDestroyRenderPass(context.device, renderPass, context.pAllocator);
-    vxDestroyCanvas(&context, &canvas);
+    vxDestroy(&context, &graphicsPipeline);
+    vxDestroy(&context, &graphicsPipelineLayout);
+    vxDestroy(&context, &descriptorSetLayout);
+    vxDestroy(&context, &descriptorPool);
+    vxDestroy(&context, &imageSampler);
+    vxDestroy(&context, &imageView);
+    vxDestroy(&context, &image);
+    vxFreeMemory(&context, &imageMemory);
+    vxDestroy(&context, &renderPass);
+    vxDestroy(&context, &canvas);
     vxDestroyContext(&context);
     puts("DONE");
     return 0;

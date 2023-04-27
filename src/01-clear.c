@@ -67,22 +67,22 @@ int main(const int argc, const char* argv[]) {
     {
         vxAssertSuccess(vxCreateContext(NULL, &context));
 
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.minImageCount: %u\n",
             context.surfaceCapabilities.minImageCount
         );
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.maxImageCount: %u\n",
             context.surfaceCapabilities.maxImageCount
         );
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.maxImageArrayLayers: %u\n",
             context.surfaceCapabilities.maxImageArrayLayers
         );
 
-        vxInfo("context.surfaceFormatCount: %u\n", context.surfaceFormatCount);
+        vxInfof("context.surfaceFormatCount: %u\n", context.surfaceFormatCount);
         for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
-            vxInfo(
+            vxInfof(
                 "context.surfaceFormats[%u]: { %s, %s }\n", i,
                 vxFormatName(context.surfaceFormats[i].format),
                 vxColorSpaceName(context.surfaceFormats[i].colorSpace)
@@ -98,7 +98,7 @@ int main(const int argc, const char* argv[]) {
                 break;
             }
         }
-        vxInfo(
+        vxInfof(
             "using surfaceFormat { %s, %s }\n",
             vxFormatName(surfaceFormat.format),
             vxColorSpaceName(surfaceFormat.colorSpace)
@@ -183,7 +183,7 @@ int main(const int argc, const char* argv[]) {
             )
         );
 
-        vxInfo("canvas.frameCount: %u", canvas.frameCount);
+        vxInfof("canvas.frameCount: %u", canvas.frameCount);
     }
 
     VkClearColorValue clearColorValue = {{ 0.4f, 0.6f, 0.9f, 1.f }};
@@ -200,8 +200,8 @@ int main(const int argc, const char* argv[]) {
             );
         }
 
-        VxCanvasFrame* pFrame;
-        vxAssertSuccess(vxBeginFrame(&context, &canvas, ~0u, 0, 0, &pFrame));
+        VxCanvasFrame* pFrame = vxBeginFrame(&context, &canvas);
+        vxAssert(pFrame);
 
         VkCommandBuffer commandBuffer = pFrame->commandBuffer;
 

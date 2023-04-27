@@ -44,11 +44,14 @@
 #endif
 
 #include <math.h>
+#include <time.h>
 
 #define VX_IMPLEMENTATION
 #define VX_USE_VOLK
 #define VX_USE_GLFW3
 #include <vulkan_express/vulkan_express.h>
+
+//------------------------------------------------------------------------------
 
 void glfwKeyCallback(GLFWwindow* w, int key, int code, int action, int mod) {
     if (key == GLFW_KEY_ESCAPE && action) {
@@ -57,7 +60,9 @@ void glfwKeyCallback(GLFWwindow* w, int key, int code, int action, int mod) {
     }
 }
 
-int main(const int argc, const char* argv[]) {
+//------------------------------------------------------------------------------
+
+int main(const int argc, char* const argv[]) {
     glfwInit();
     if (!glfwVulkanSupported()) {
         puts("GLFW3: Vulkan not supported");
@@ -69,22 +74,22 @@ int main(const int argc, const char* argv[]) {
     {
         vxAssertSuccess(vxCreateContext(NULL, &context));
 
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.minImageCount: %u\n",
             context.surfaceCapabilities.minImageCount
         );
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.maxImageCount: %u\n",
             context.surfaceCapabilities.maxImageCount
         );
-        vxInfo(
+        vxInfof(
             "context.surfaceCapabilities.maxImageArrayLayers: %u\n",
             context.surfaceCapabilities.maxImageArrayLayers
         );
 
-        vxInfo("context.surfaceFormatCount: %u\n", context.surfaceFormatCount);
+        vxInfof("context.surfaceFormatCount: %u\n", context.surfaceFormatCount);
         for (uint32_t i = 0; i < context.surfaceFormatCount; ++i) {
-            vxInfo(
+            vxInfof(
                 "context.surfaceFormats[%u]: { %s, %s }\n", i,
                 vxFormatName(context.surfaceFormats[i].format),
                 vxColorSpaceName(context.surfaceFormats[i].colorSpace)
@@ -100,7 +105,7 @@ int main(const int argc, const char* argv[]) {
                 break;
             }
         }
-        vxInfo(
+        vxInfof(
             "using surfaceFormat { %s, %s }\n",
             vxFormatName(surfaceFormat.format),
             vxColorSpaceName(surfaceFormat.colorSpace)
@@ -294,12 +299,14 @@ int main(const int argc, const char* argv[]) {
             )
         );
 
-        vxInfo("canvas.frameCount: %u", canvas.frameCount);
+        vxInfof("canvas.frameCount: %u", canvas.frameCount);
     }
 
     VkClearColorValue clearColorValue = {{ 0.4f, 0.6f, 0.9f, 1.f }};
     float colorChannelStep[3] = { 0.002f, 0.003f, 0.0045f };
 
+    time_t oldFrameTime; time(&oldFrameTime);
+    uint32_t frameCounter = 0;
     while (!(glfwPollEvents(),glfwWindowShouldClose(window))) {
 
         // cycle clear color
@@ -311,25 +318,14 @@ int main(const int argc, const char* argv[]) {
             );
         }
 
-        VxCanvasFrame* pFrame;
-        vxAssertSuccess(vxBeginFrame(&context, &canvas, ~0u, 0, 0, &pFrame));
+        VxCanvasFrame* pFrame = vxBeginFrame(&context, &canvas);
+        vxAssert(pFrame);
 
-        VkCommandBuffer commandBuffer = pFrame->commandBuffer;
-
-        VkRenderPassBeginInfo renderPassInfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass  = canvas.renderPass,
-            .framebuffer = pFrame->framebuffer,
-            .renderArea  = {
-                .extent  = canvas.extent,
-            },
-            .clearValueCount = 1,
-            .pClearValues    = VxInlineArray(VkClearValue){
+        VkCommandBuffer commandBuffer = vxCmdBeginFrameRenderPass(
+            &canvas, pFrame, 1, VxInlineArray(VkClearValue){
                 { .color = clearColorValue },
-            },
-        };
-
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            }
+        );
         {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
@@ -351,13 +347,24 @@ int main(const int argc, const char* argv[]) {
         vxAssertSuccess(vxSubmitFrame(&context, &canvas, pFrame));
         vxAssertSuccess(vxPresentFrame(&context, &canvas, pFrame));
 
+        ++frameCounter;
+        time_t newFrameTime; time(&newFrameTime);
+        if (newFrameTime > oldFrameTime) {
+            uint32_t seconds = (uint32_t)(newFrameTime - oldFrameTime);
+            uint32_t fps = frameCounter / seconds;
+            char buffer[sizeof(title) + 32];
+            snprintf(buffer, sizeof(buffer), "%s - %u fps", title, fps);
+            glfwSetWindowTitle(window, buffer);
+            frameCounter = 0;
+            oldFrameTime = newFrameTime;
+        }
     }
 
     vkDeviceWaitIdle(context.device);
-    vkDestroyPipeline(context.device, graphicsPipeline, context.pAllocator);
-    vkDestroyPipelineLayout(context.device, graphicsPipelineLayout, context.pAllocator);
-    vkDestroyRenderPass(context.device, renderPass, context.pAllocator);
-    vxDestroyCanvas(&context, &canvas);
+    vxDestroy(&context, &graphicsPipeline);
+    vxDestroy(&context, &graphicsPipelineLayout);
+    vxDestroy(&context, &renderPass);
+    vxDestroy(&context, &canvas);
     vxDestroyContext(&context);
     puts("DONE");
     return 0;
