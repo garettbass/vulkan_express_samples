@@ -5,6 +5,7 @@
         "spirv_reflect.h": "c",
         "math.h": "c",
         "inttypes.h": "c",
-        "*.m": "c"
+        "*.m": "c",
+        "volk.h": "c"
     }
 }

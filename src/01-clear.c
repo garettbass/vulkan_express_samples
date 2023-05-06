@@ -211,24 +211,26 @@ int main(const int argc, const char* argv[]) {
             .baseArrayLayer = 0, .layerCount = 1,
         };
 
-        vkCmdPipelineBarrier2(
+        vkCmdPipelineBarrier(
             commandBuffer,
-            VxInlinePtr(VkDependencyInfo){
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = VxInlinePtr(VkImageMemoryBarrier2){
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .srcStageMask        = VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    .srcAccessMask       = VK_ACCESS_MEMORY_READ_BIT,
-                    .dstStageMask        = VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    .dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
-                    .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .srcQueueFamilyIndex = context.graphicsQueueFamilyIndex,
-                    .dstQueueFamilyIndex = context.graphicsQueueFamilyIndex,
-                    .image               = pFrame->swapchainImage,
-                    .subresourceRange    = subresourceRange,
-                },
+            /* srcStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
+            /* dstStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
+            /* dependencyFlags          */ 0,
+            /* memoryBarrierCount       */ 0,
+            /* pMemoryBarriers          */ NULL,
+            /* bufferMemoryBarrierCount */ 0,
+            /* pBufferMemoryBarriers    */ NULL,
+            /* imageMemoryBarrierCount  */ 1,
+            /* pImageMemoryBarriers     */ VxInlinePtr(VkImageMemoryBarrier){
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask       = VK_ACCESS_MEMORY_READ_BIT,
+                .dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .srcQueueFamilyIndex = context.graphicsQueueFamilyIndex,
+                .dstQueueFamilyIndex = context.graphicsQueueFamilyIndex,
+                .image               = pFrame->swapchainImage,
+                .subresourceRange    = subresourceRange,
             }
         );
 
@@ -241,24 +243,26 @@ int main(const int argc, const char* argv[]) {
             &subresourceRange
         );
 
-        vkCmdPipelineBarrier2(
+        vkCmdPipelineBarrier(
             commandBuffer,
-            VxInlinePtr(VkDependencyInfo){
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = VxInlinePtr(VkImageMemoryBarrier2){
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .srcStageMask        = VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    .srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
-                    .dstStageMask        = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                    .dstAccessMask       = VK_ACCESS_MEMORY_READ_BIT,
-                    .oldLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    .srcQueueFamilyIndex = context.graphicsQueueFamilyIndex,
-                    .dstQueueFamilyIndex = context.graphicsQueueFamilyIndex,
-                    .image               = pFrame->swapchainImage,
-                    .subresourceRange    = subresourceRange,
-                },
+            /* srcStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
+            /* dstStageMask             */ VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            /* dependencyFlags          */ 0,
+            /* memoryBarrierCount       */ 0,
+            /* pMemoryBarriers          */ NULL,
+            /* bufferMemoryBarrierCount */ 0,
+            /* pBufferMemoryBarriers    */ NULL,
+            /* imageMemoryBarrierCount  */ 1,
+            /* pImageMemoryBarriers     */ VxInlinePtr(VkImageMemoryBarrier){
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .dstAccessMask       = VK_ACCESS_MEMORY_READ_BIT,
+                .oldLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .srcQueueFamilyIndex = context.graphicsQueueFamilyIndex,
+                .dstQueueFamilyIndex = context.graphicsQueueFamilyIndex,
+                .image               = pFrame->swapchainImage,
+                .subresourceRange    = subresourceRange,
             }
         );
 

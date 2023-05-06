@@ -1,6 +1,6 @@
 /*cxe{
-    -pre { glslc 03-texture.vert -mfmt=c -o 03-texture.vert.h }
-    -pre { glslc 03-texture.frag -mfmt=c -o 03-texture.frag.h }
+    -pre { glslc 04-instancing.vert -mfmt=c -o 04-instancing.vert.h }
+    -pre { glslc 04-instancing.frag -mfmt=c -o 04-instancing.frag.h }
     -pre { $CXE glfw3.c }
     -std=c11
     -Wall -Werror
@@ -40,7 +40,7 @@
 }*/
 
 #ifndef SAMPLE_SOURCE
-#define SAMPLE_SOURCE "03-texture.c"
+#define SAMPLE_SOURCE "04-instancing.c"
 #endif
 
 #include <math.h>
@@ -90,162 +90,144 @@ void glfwKeyCallback(GLFWwindow* w, int key, int code, int action, int mod) {
 
 //------------------------------------------------------------------------------
 
-VkResult loadImage(
+const char* vxMemoryPropertyFlagNames(VkMemoryPropertyFlags flags) {
+    static char buffer[sizeof(
+        "DEVICE_LOCAL_BIT | "
+        "HOST_VISIBLE_BIT | "
+        "HOST_COHERENT_BIT | "
+        "HOST_CACHED_BIT | "
+        "LAZILY_ALLOCATED_BIT | "
+        "PROTECTED_BIT | "
+        "DEVICE_COHERENT_BIT_AMD | "
+        "DEVICE_UNCACHED_BIT_AMD | "
+        "RDMA_CAPABLE_BIT_NV | "
+        "\0"
+    )] = "";
+
+    char* itr = buffer;
+    strcpy(itr, "0");
+    if (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+        itr += strlen(strcpy(itr, "DEVICE_LOCAL_BIT | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        itr += strlen(strcpy(itr, "HOST_VISIBLE_BIT | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
+        itr += strlen(strcpy(itr, "HOST_COHERENT_BIT | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) {
+        itr += strlen(strcpy(itr, "HOST_CACHED_BIT | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
+        itr += strlen(strcpy(itr, "LAZILY_ALLOCATED_BIT | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_PROTECTED_BIT) {
+        itr += strlen(strcpy(itr, "PROTECTED_BIT | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) {
+        itr += strlen(strcpy(itr, "DEVICE_COHERENT_BIT_AMD | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD) {
+        itr += strlen(strcpy(itr, "DEVICE_UNCACHED_BIT_AMD | "));
+    }
+    if (flags & VK_MEMORY_PROPERTY_RDMA_CAPABLE_BIT_NV) {
+        itr += strlen(strcpy(itr, "RDMA_CAPABLE_BIT_NV | "));
+    }
+    vxAssert(itr < buffer + sizeof(buffer));
+    if (itr > buffer) {
+        itr[-3] = 0; // trim trailing " | "
+    }
+    return buffer;
+}
+
+const char* vxMemoryHeapFlagNames(VkMemoryHeapFlags flags) {
+    static char buffer[] = {
+        "DEVICE_LOCAL_BIT | "
+        "MULTI_INSTANCE_BIT | "
+        "\0"
+    };
+    char* itr = buffer;
+    strcpy(itr, "0");
+    if (flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+        itr += strlen(strcpy(itr, "DEVICE_LOCAL_BIT | "));
+    }
+    if (flags & VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) {
+        itr += strlen(strcpy(itr, "MULTI_INSTANCE_BIT | "));
+    }
+    vxAssert(itr < buffer + sizeof(buffer));
+    if (itr > buffer) {
+        itr[-3] = 0; // trim trailing " | "
+    }
+    return buffer;
+}
+
+//------------------------------------------------------------------------------
+
+VxImageAllocation loadTexture(
     const VxContext* pContext,
-    const char* path,
-    VkImage* pImage,
-    VkImageView* pImageView,
-    VkDeviceMemory* pImageMemory
+    const VxBufferAllocation* pUploadBufferAllocation,
+    const char* path
 ) {
     int width, height, channels;
-    const int desired_channels = 4;
-    uint8_t* pixels = stbi_load(path, &width, &height, &channels, desired_channels);
+    uint8_t* pixels = stbi_load(path, &width, &height, &channels, 4);
+
     vxAssert(pixels);
     vxAssert(width > 0);
     vxAssert(height > 0);
     vxAssert(channels > 0);
-    vxAssert(channels <= desired_channels);
+    vxAssert(channels <= 4);
 
-    channels = desired_channels;
+    channels = 4;
 
     const uint32_t imageSize = width * height * channels;
 
-    const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    vxAssert(imageSize <= pUploadBufferAllocation->size);
 
-    VkFormatProperties formatProperties;
-    vkGetPhysicalDeviceFormatProperties(
-        pContext->physicalDevice,
-        imageFormat,
-        &formatProperties
-    );
-
-    // TODO: validate image format
-    // https://i.gyazo.com/7f56cdef5023147ac7bacf7264ead096.png
-
-    const VkExtent3D imageExtent = {
-        .width  = (uint32_t)width,
-        .height = (uint32_t)height,
-        .depth  = 1u,
-    };
-
-    VkBuffer stagingBuffer;
-    vxExpectSuccessOrReturn(
-        vkCreateBuffer(
-            pContext->device,
-            VxInlinePtr(VkBufferCreateInfo){
-                .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                .size        = imageSize,
-                .usage       = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            },
-            pContext->pAllocator,
-            &stagingBuffer
-        ),{
-            stbi_image_free(pixels);
-        }
-    );
-
-    VkDeviceMemory stagingBufferMemory;
-    vxExpectSuccessOrReturn(
-        vxAllocateBufferMemory(
+    vxAssertSuccess(
+        vxCopyToBufferAllocation(
             pContext,
-            stagingBuffer,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &stagingBufferMemory
-        ),{
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            stbi_image_free(pixels);
-        }
+            pUploadBufferAllocation,
+            0, imageSize, pixels
+        )
     );
 
-    vxExpectSuccessOrReturn(
-        vkBindBufferMemory(
-            pContext->device,
-            stagingBuffer,
-            stagingBufferMemory,
-            0
-        ),{
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            stbi_image_free(pixels);
-        }
-    );
-
-    void* stagingBufferDst;
-    vxExpectSuccessOrReturn(
-        vkMapMemory(
-            pContext->device,
-            stagingBufferMemory,
-            0, imageSize,
-            0,
-            &stagingBufferDst
-        ),{
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            stbi_image_free(pixels);
-        }
-    );
-    memcpy(stagingBufferDst, pixels, imageSize);
-    vkUnmapMemory(pContext->device, stagingBufferMemory);
     stbi_image_free(pixels);
 
-    vxExpectSuccessOrReturn(
-        vkCreateImage(
-            pContext->device,
-            VxInlinePtr(VkImageCreateInfo){
+    VxImageAllocation imageAllocation = vxImageAllocation(
+        pContext,
+        (VxImageAllocationInfo){
+            .image = {
                 .sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                 .imageType   = VK_IMAGE_TYPE_2D,
-                .format      = imageFormat,
-                .extent      = imageExtent,
+                .format      = VK_FORMAT_R8G8B8A8_SRGB,
+                .extent      = {
+                    .width   = (uint32_t)width,
+                    .height  = (uint32_t)height,
+                    .depth   = 1u,
+                },
                 .mipLevels   = 1,
                 .arrayLayers = 1,
                 .samples     = VK_SAMPLE_COUNT_1_BIT,
                 .tiling      = VK_IMAGE_TILING_OPTIMAL,
-                .usage
-                    = VK_IMAGE_USAGE_TRANSFER_DST_BIT
-                    | VK_IMAGE_USAGE_SAMPLED_BIT,
-                .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
+                .usage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                                | VK_IMAGE_USAGE_SAMPLED_BIT,
                 .queueFamilyIndexCount = 1,
-                .pQueueFamilyIndices   = &pContext->graphicsQueueFamilyIndex,
-                .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED,
+                .pQueueFamilyIndices = &pContext->graphicsQueueFamilyIndex,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             },
-            pContext->pAllocator,
-            pImage
-        ),{
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
+            .imageAspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+            .memory = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         }
     );
 
-    vxExpectSuccessOrReturn(
-        vxAllocateImageMemory(
-            pContext,
-            *pImage,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            pImageMemory
-        ),{
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            *pImage = VK_NULL_HANDLE;
-        }
-    );
-
-    vxExpectSuccessOrReturn(
-        vkBindImageMemory(
-            pContext->device,
-            *pImage,
-            *pImageMemory,
-            0
-        ),{
-            vkFreeMemory(pContext->device, *pImageMemory, pContext->pAllocator);
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            *pImageMemory = VK_NULL_HANDLE;
-            *pImage = VK_NULL_HANDLE;
-        }
+    vxAssertSuccess(
+        vkBeginCommandBuffer(
+            pContext->commandBuffer,
+            VxInlinePtr(VkCommandBufferBeginInfo){
+                VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            }
+        )
     );
 
     VkImageSubresourceRange subresourceRange = {
@@ -254,73 +236,8 @@ VkResult loadImage(
         .baseArrayLayer = 0, .layerCount = 1,
     };
 
-    vxExpectSuccessOrReturn(
-        vkCreateImageView(
-            pContext->device,
-            VxInlinePtr(VkImageViewCreateInfo){
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .image = *pImage,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = imageFormat,
-                .subresourceRange = subresourceRange,
-            },
-            pContext->pAllocator,
-            pImageView
-        ),{
-            vkFreeMemory(pContext->device, *pImageMemory, pContext->pAllocator);
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            *pImageMemory = VK_NULL_HANDLE;
-            *pImage = VK_NULL_HANDLE;
-        }
-    );
-
-    VkCommandBuffer commandBuffer;
-    vxExpectSuccessOrReturn(
-        vkAllocateCommandBuffers(
-            pContext->device,
-            VxInlinePtr(VkCommandBufferAllocateInfo){
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                .commandPool        = pContext->commandPool,
-                .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                .commandBufferCount = 1,
-            },
-            &commandBuffer
-        ),{
-            vkDestroyImageView(pContext->device, *pImageView, pContext->pAllocator);
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, *pImageMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            *pImageMemory = VK_NULL_HANDLE;
-            *pImageView = VK_NULL_HANDLE;
-            *pImage = VK_NULL_HANDLE;
-        }
-    );
-
-    vxExpectSuccessOrReturn(
-        vkBeginCommandBuffer(
-            commandBuffer,
-            VxInlinePtr(VkCommandBufferBeginInfo){
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-            }
-        ),{
-            vkFreeCommandBuffers(pContext->device, pContext->commandPool, 1, &commandBuffer);
-            vkDestroyImageView(pContext->device, *pImageView, pContext->pAllocator);
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, *pImageMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            *pImageMemory = VK_NULL_HANDLE;
-            *pImageView = VK_NULL_HANDLE;
-            *pImage = VK_NULL_HANDLE;
-        }
-    );
-
     vkCmdPipelineBarrier(
-        commandBuffer,
+        pContext->commandBuffer,
         /* srcStageMask             */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dstStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
         /* dependencyFlags          */ 0,
@@ -337,15 +254,15 @@ VkResult loadImage(
             .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = *pImage,
+            .image               = imageAllocation.image,
             .subresourceRange    = subresourceRange,
         }
     );
 
     vkCmdCopyBufferToImage(
-        commandBuffer,
-        stagingBuffer,
-        *pImage,
+        pContext->commandBuffer,
+        pUploadBufferAllocation->buffer,
+        imageAllocation.image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, VxInlinePtr(VkBufferImageCopy){
             .bufferOffset       = 0,
@@ -358,12 +275,12 @@ VkResult loadImage(
                 .layerCount     = subresourceRange.layerCount,
             },
             .imageOffset = { 0, 0, 0 },
-            .imageExtent = imageExtent,
+            .imageExtent = imageAllocation.extent,
         }
     );
 
     vkCmdPipelineBarrier(
-        commandBuffer,
+        pContext->commandBuffer,
         /* srcStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
         /* dstStageMask             */ VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         /* dependencyFlags          */ 0,
@@ -380,55 +297,151 @@ VkResult loadImage(
             .newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = *pImage,
+            .image               = imageAllocation.image,
             .subresourceRange    = subresourceRange,
         }
     );
 
-    vkEndCommandBuffer(commandBuffer);
+    vkEndCommandBuffer(pContext->commandBuffer);
 
-    vxExpectSuccessOrReturn(
+    vxAssertSuccess(
         vkQueueSubmit(
             pContext->graphicsQueue,
             1, VxInlinePtr(VkSubmitInfo){
                 .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &commandBuffer,
+                .pCommandBuffers = &pContext->commandBuffer,
             },
             VK_NULL_HANDLE
-        ),{
-            vkFreeCommandBuffers(pContext->device, pContext->commandPool, 1, &commandBuffer);
-            vkDestroyImageView(pContext->device, *pImageView, pContext->pAllocator);
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, *pImageMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            *pImageMemory = VK_NULL_HANDLE;
-            *pImageView = VK_NULL_HANDLE;
-            *pImage = VK_NULL_HANDLE;
-        }
+        )
     );
 
-    vxExpectSuccessOrReturn(
+    vxAssertSuccess(
         vkQueueWaitIdle(
             pContext->graphicsQueue
-        ),{
-            vkFreeCommandBuffers(pContext->device, pContext->commandPool, 1, &commandBuffer);
-            vkDestroyImageView(pContext->device, *pImageView, pContext->pAllocator);
-            vkDestroyImage(pContext->device, *pImage, pContext->pAllocator);
-            vkFreeMemory(pContext->device, *pImageMemory, pContext->pAllocator);
-            vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-            vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-            *pImageMemory = VK_NULL_HANDLE;
-            *pImageView = VK_NULL_HANDLE;
-            *pImage = VK_NULL_HANDLE;
+        )
+    );
+
+    return imageAllocation;
+}
+
+//------------------------------------------------------------------------------
+
+VxBufferAllocation loadBuffer(
+    const VxContext* pContext,
+    const VxBufferAllocation* pUploadBufferAllocation,
+    uint32_t dataSize,
+    void* pData
+) {
+    vxAssertSuccess(
+        vxCopyToBufferAllocation(
+            pContext,
+            pUploadBufferAllocation,
+            0, dataSize, pData
+        )
+    );
+
+    VxBufferAllocation bufferAllocation = vxBufferAllocation(
+        pContext,
+        (VxBufferAllocationInfo){
+            .buffer = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .size = dataSize,
+                .usage =
+                    VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                .queueFamilyIndexCount = 1,
+                .pQueueFamilyIndices = &pContext->graphicsQueueFamilyIndex,
+            },
+            .memory = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         }
     );
 
-    vkFreeCommandBuffers(pContext->device, pContext->commandPool, 1, &commandBuffer);
-    vkDestroyBuffer(pContext->device, stagingBuffer, pContext->pAllocator);
-    vkFreeMemory(pContext->device, stagingBufferMemory, pContext->pAllocator);
-    return VK_SUCCESS;
+    vxAssertSuccess(
+        vkBeginCommandBuffer(
+            pContext->commandBuffer,
+            VxInlinePtr(VkCommandBufferBeginInfo){
+                VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            }
+        )
+    );
+
+    vkCmdPipelineBarrier(
+        pContext->commandBuffer,
+        /* srcStageMask             */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        /* dstStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
+        /* dependencyFlags          */ 0,
+        /* memoryBarrierCount       */ 0,
+        /* pMemoryBarriers          */ NULL,
+        /* bufferMemoryBarrierCount */ 1,
+        /* pBufferMemoryBarriers    */ VxInlinePtr(VkBufferMemoryBarrier){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask       = 0,
+            .dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer              = bufferAllocation.buffer,
+            .offset              = 0,
+            .size                = VK_WHOLE_SIZE,
+        },
+        /* imageMemoryBarrierCount  */ 0,
+        /* pImageMemoryBarriers     */ NULL
+    );
+
+    vkCmdCopyBuffer(
+        pContext->commandBuffer,
+        pUploadBufferAllocation->buffer,
+        bufferAllocation.buffer,
+        1, VxInlinePtr(VkBufferCopy){
+            .srcOffset = 0,
+            .dstOffset = 0,
+            .size = dataSize,
+        }
+    );
+
+    vkCmdPipelineBarrier(
+        pContext->commandBuffer,
+        /* srcStageMask             */ VK_PIPELINE_STAGE_TRANSFER_BIT,
+        /* dstStageMask             */ VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+        /* dependencyFlags          */ 0,
+        /* memoryBarrierCount       */ 0,
+        /* pMemoryBarriers          */ NULL,
+        /* bufferMemoryBarrierCount */ 1,
+        /* pBufferMemoryBarriers    */ VxInlinePtr(VkBufferMemoryBarrier){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask       = VK_ACCESS_SHADER_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer              = bufferAllocation.buffer,
+            .offset              = 0,
+            .size                = VK_WHOLE_SIZE,
+        },
+        /* imageMemoryBarrierCount  */ 0,
+        /* pImageMemoryBarriers     */ NULL
+    );
+
+    vkEndCommandBuffer(pContext->commandBuffer);
+
+    vxAssertSuccess(
+        vkQueueSubmit(
+            pContext->graphicsQueue,
+            1, VxInlinePtr(VkSubmitInfo){
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &pContext->commandBuffer,
+            },
+            VK_NULL_HANDLE
+        )
+    );
+
+    vxAssertSuccess(
+        vkQueueWaitIdle(
+            pContext->graphicsQueue
+        )
+    );
+
+    return bufferAllocation;
 }
 
 //------------------------------------------------------------------------------
@@ -485,6 +498,54 @@ int main(const int argc, char* const argv[]) {
         );
     }
 
+    puts("");
+    for (uint32_t i = 0; i < context.physicalDeviceMemoryProperties.memoryTypeCount; ++i) {
+        const VkMemoryType t = context.physicalDeviceMemoryProperties.memoryTypes[i];
+        const VkMemoryHeap h = context.physicalDeviceMemoryProperties.memoryHeaps[t.heapIndex];
+        uint64_t size = h.size;
+        const char* sizeUnit = "B";
+        if (size > 1024) {
+            size /= 1024;
+            sizeUnit = "KB";
+        }
+        if (size > 1024) {
+            size /= 1024;
+            sizeUnit = "MB";
+        }
+        if (size > 1024) {
+            size /= 1024;
+            sizeUnit = "GB";
+        }
+        vxInfof(
+            "memoryTypes[%u]\n"
+            "    propertyFlags: %s\n"
+            "    heapIndex:     %u\n"
+            "    heap.size:     %llu%s\n"
+            "    heap.flags:    %s",
+            i,
+            vxMemoryPropertyFlagNames(t.propertyFlags),
+            t.heapIndex,
+            size, sizeUnit,
+            vxMemoryHeapFlagNames(h.flags)
+        );
+    }
+
+    VxBufferAllocation upload = vxBufferAllocation(
+        &context,
+        (VxBufferAllocationInfo){
+            .buffer = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .size = 64 * 1024 * 1024,
+                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            },
+            .memory
+                = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        }
+    );
+    vxInfof("upload.size: %llu", upload.size);
+
     const uint32_t swapchainImageCount = 2;
 
     VkRenderPass renderPass;
@@ -534,21 +595,13 @@ int main(const int argc, char* const argv[]) {
         );
     }
 
-    VkImage image;
-    VkImageView imageView;
-    VkDeviceMemory imageMemory;
-    VkSampler imageSampler;
-    {
-        vxAssertSuccess(
-            loadImage(
-                &context,
-                "../../src/texcoordsRGB.png",
-                &image,
-                &imageView,
-                &imageMemory
-            )
-        );
+    // relative to executable path
+    const char texturePath[] = "../../src/texcoordsRGB.png";
 
+    VxImageAllocation texture = loadTexture(&context, &upload, texturePath);
+    VkSampler LINEAR_REPEAT;
+    VkSampler NEAREST_CLAMP;
+    {
         vxAssertSuccess(
             vkCreateSampler(
                 context.device,
@@ -571,112 +624,119 @@ int main(const int argc, char* const argv[]) {
                     .unnormalizedCoordinates = VK_FALSE,
                 },
                 context.pAllocator,
-                &imageSampler
+                &LINEAR_REPEAT
+            )
+        );
+
+        vxAssertSuccess(
+            vkCreateSampler(
+                context.device,
+                VxInlinePtr(VkSamplerCreateInfo){
+                    .sType            = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                    .magFilter        = VK_FILTER_NEAREST,
+                    .minFilter        = VK_FILTER_NEAREST,
+                    .mipmapMode       = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                    .addressModeU     = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .addressModeV     = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .addressModeW     = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .anisotropyEnable = VK_TRUE,
+                    .maxAnisotropy    = context
+                        .physicalDeviceProperties
+                        .limits
+                        .maxSamplerAnisotropy,
+                    .compareEnable           = VK_FALSE,
+                    .compareOp               = VK_COMPARE_OP_ALWAYS,
+                    .borderColor             = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+                    .unnormalizedCoordinates = VK_FALSE,
+                },
+                context.pAllocator,
+                &NEAREST_CLAMP
             )
         );
     }
 
-    VkDescriptorSetLayout descriptorSetLayout;
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSet descriptorSets[VX_MAX_CANVAS_FRAME_COUNT];
+    const uint32_t vertexCount = 4;
+    const uint32_t instanceCountX = 16;
+    const uint32_t instanceCountY = 16;
+    const uint32_t instanceCount = instanceCountX * instanceCountY;
+    VxBufferAllocation instances;
     {
-        vxAssertSuccess(
-            vkCreateDescriptorSetLayout(
-                context.device,
-                VxInlinePtr(VkDescriptorSetLayoutCreateInfo){
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                    .bindingCount = 1,
-                    .pBindings = VxInlineArray(VkDescriptorSetLayoutBinding){
-                        {
-                            .binding = 0,
-                            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                            .descriptorCount = 1,
-                            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                            .pImmutableSamplers = NULL,
-                        },
-                    }
-                },
-                context.pAllocator,
-                &descriptorSetLayout
-            )
-        );
+        typedef struct f32x2 {
+            float x, y;
+        } f32x2;
 
-        vxAssertSuccess(
-            vkCreateDescriptorPool(
-                context.device,
-                VxInlinePtr(VkDescriptorPoolCreateInfo){
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                    .maxSets = swapchainImageCount,
-                    .poolSizeCount = 1,
-                    .pPoolSizes = VxInlineArray(VkDescriptorPoolSize){
-                        {
-                            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                            .descriptorCount = swapchainImageCount,
-                        },
-                    },
-                },
-                context.pAllocator,
-                &descriptorPool
-            )
-        );
+        typedef struct Instance {
+            f32x2 origin;
+            f32x2 extent;
+        } Instance;
 
-        vxAssertSuccess(
-            vkAllocateDescriptorSets(
-                context.device,
-                VxInlinePtr(VkDescriptorSetAllocateInfo){
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                    .descriptorPool = descriptorPool,
-                    .descriptorSetCount = swapchainImageCount,
-                    .pSetLayouts = VxInlineArray(VkDescriptorSetLayout){
-                        descriptorSetLayout,
-                        descriptorSetLayout,
-                    },
-                },
-                descriptorSets
-            )
-        );
+        const size_t instanceDataSize = sizeof(Instance) * instanceCount;
+        Instance* instanceData = (Instance*)malloc(instanceDataSize);
 
-        VkWriteDescriptorSet writeDescriptorSets[] = {
-            { // 0
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = VxInlineArray(VkDescriptorImageInfo){
-                    {
-                        .sampler = imageSampler,
-                        .imageView = imageView,
-                        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    }
-                },
-                .pBufferInfo = NULL,
-                .pTexelBufferView = NULL,
-            },
-        };
-
-        VkCopyDescriptorSet copyDescriptorSets[] = {};
-
-        for (uint32_t i = 0; i < swapchainImageCount; ++i) {
-            writeDescriptorSets[0].dstSet = descriptorSets[i];
-            vkUpdateDescriptorSets(
-                context.device,
-                vxLengthOf(writeDescriptorSets), writeDescriptorSets,
-                vxLengthOf(copyDescriptorSets), copyDescriptorSets
-            );
+        const float stepX = 2.f / (float)instanceCountX; // [-1..+1]
+        const float stepY = 2.f / (float)instanceCountY; // [-1..+1]
+        const float sizeX = 1.f / (float)instanceCountX;
+        const float sizeY = 1.f / (float)instanceCountY;
+        const float extentX = sizeX * 0.75f;
+        const float extentY = sizeY * 0.75f;
+        for (uint32_t y = 0; y < instanceCountY; ++y)
+        for (uint32_t x = 0; x < instanceCountX; ++x) {
+            const uint32_t i = x + instanceCountX * y;
+            float offsetX = -1.f + sizeX + stepX * (float)x;
+            float offsetY = -1.f + sizeY + stepY * (float)y;
+            instanceData[i] = (Instance){
+                .origin = { offsetX,  offsetY },
+                .extent = { extentX,  extentY },
+            };
         }
+
+        instances = loadBuffer(
+            &context, &upload,
+            instanceDataSize,
+            instanceData
+        );
+
+        free(instanceData);
     }
+
+    VxBindGroup bindGroup0 = vxBindGroup(
+        &context,
+        (VxBindGroupCreateInfo){
+            .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS,
+            .bindingCount = 4,
+            .bindings = {
+                {
+                    .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                    .imageView = texture.imageView,
+                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                },
+                {
+                    .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                    .sampler = LINEAR_REPEAT,
+                },
+                {
+                    .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                    .sampler = NEAREST_CLAMP,
+                },
+                {
+                    .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .buffer = instances.buffer,
+                    .bufferOffset = 0,
+                    .bufferRange = VK_WHOLE_SIZE,
+                },
+            },
+        }
+    );
 
     VkPipelineLayout graphicsPipelineLayout;
     VkPipeline graphicsPipeline;
     {
         const uint32_t vert[] =
-            #include "03-texture.vert.h"
+            #include "04-instancing.vert.h"
             ;
 
         const uint32_t frag[] =
-            #include "03-texture.frag.h"
+            #include "04-instancing.frag.h"
             ;
 
         VkShaderModule vertShaderModule;
@@ -691,7 +751,7 @@ int main(const int argc, char* const argv[]) {
                 VxInlinePtr(VkPipelineLayoutCreateInfo){
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                     .setLayoutCount = 1,
-                    .pSetLayouts = &descriptorSetLayout,
+                    .pSetLayouts = &bindGroup0.descriptorSetLayout,
                 },
                 context.pAllocator,
                 &graphicsPipelineLayout
@@ -729,7 +789,7 @@ int main(const int argc, char* const argv[]) {
                     .pViewportState = VxInlinePtr(VkPipelineViewportStateCreateInfo){
                         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
                         .viewportCount = 1,
-                        .scissorCount  = 1,
+                        .scissorCount = 1,
                     },
                     .pRasterizationState = VxInlinePtr(VkPipelineRasterizationStateCreateInfo){
                         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -788,28 +848,22 @@ int main(const int argc, char* const argv[]) {
         glfwSetKeyCallback(window, glfwKeyCallback);
     }
 
-    VxCanvas canvas;
-    {
-        vxAssertSuccess(
-            vxCreateCanvas(
-                &context,
-                VxInlinePtr(VxCanvasCreateInfo){
-                    .windowHandleType    = VX_WINDOW_HANDLE_TYPE_GLFW,
-                    .windowHandle        = window,
-                    .surfaceFormat       = surfaceFormat,
-                    .swapchainImageCount = swapchainImageCount,
-                    .preferredPresentModeCount = 1,
-                    .preferredPresentModes     = {
-                        VK_PRESENT_MODE_FIFO_KHR,
-                    },
-                    .renderPass = renderPass,
-                },
-                &canvas
-            )
-        );
+    VxCanvas canvas = vxCanvas(
+        &context,
+        (VxCanvasCreateInfo){
+            .windowHandleType    = VX_WINDOW_HANDLE_TYPE_GLFW,
+            .windowHandle        = window,
+            .surfaceFormat       = surfaceFormat,
+            .swapchainImageCount = swapchainImageCount,
+            .preferredPresentModeCount = 1,
+            .preferredPresentModes     = {
+                VK_PRESENT_MODE_FIFO_KHR,
+            },
+            .renderPass = renderPass,
+        }
+    );
 
-        vxInfof("canvas.frameCount: %u", canvas.frameCount);
-    }
+    vxInfof("canvas.frameCount: %u", canvas.frameCount);
 
     VkClearColorValue clearColorValue = {{ 0.4f, 0.6f, 0.9f, 1.f }};
     float colorChannelStep[3] = { 0.002f, 0.003f, 0.0045f };
@@ -830,10 +884,23 @@ int main(const int argc, char* const argv[]) {
         VxCanvasFrame* pFrame = vxBeginFrame(&context, &canvas);
         vxAssert(pFrame);
 
-        VkCommandBuffer commandBuffer = vxCmdBeginFrameRenderPass(
-            &canvas, pFrame, 1, VxInlineArray(VkClearValue){
-                { .color = clearColorValue },
-            }
+        VkCommandBuffer commandBuffer = pFrame->commandBuffer;
+
+        vkCmdBeginRenderPass(
+            commandBuffer,
+            VxInlinePtr(VkRenderPassBeginInfo){
+                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                .renderPass  = canvas.renderPass,
+                .framebuffer = pFrame->framebuffer,
+                .renderArea  = {
+                    .extent  = canvas.extent,
+                },
+                .clearValueCount = 1,
+                .pClearValues    = VxInlinePtr(VkClearValue){
+                    .color       = clearColorValue
+                },
+            },
+            VK_SUBPASS_CONTENTS_INLINE
         );
         {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
@@ -853,11 +920,11 @@ int main(const int argc, char* const argv[]) {
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 graphicsPipelineLayout,
-                0, 1, &descriptorSets[pFrame->frameIndex],
+                0, 1, &bindGroup0.descriptorSet,
                 0, NULL
             );
 
-            vkCmdDraw(commandBuffer, 4, 1, 0, 0);
+            vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
         }
         vkCmdEndRenderPass(commandBuffer);
 
@@ -880,13 +947,13 @@ int main(const int argc, char* const argv[]) {
     vkDeviceWaitIdle(context.device);
     vxDestroy(&context, &graphicsPipeline);
     vxDestroy(&context, &graphicsPipelineLayout);
-    vxDestroy(&context, &descriptorSetLayout);
-    vxDestroy(&context, &descriptorPool);
-    vxDestroy(&context, &imageSampler);
-    vxDestroy(&context, &imageView);
-    vxDestroy(&context, &image);
-    vxFreeMemory(&context, &imageMemory);
     vxDestroy(&context, &renderPass);
+    vxDestroy(&context, &NEAREST_CLAMP);
+    vxDestroy(&context, &LINEAR_REPEAT);
+    vxDestroy(&context, &bindGroup0);
+    vxDestroy(&context, &instances);
+    vxDestroy(&context, &texture);
+    vxDestroy(&context, &upload);
     vxDestroy(&context, &canvas);
     vxDestroyContext(&context);
     puts("DONE");
